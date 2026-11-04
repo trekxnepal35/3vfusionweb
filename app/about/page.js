@@ -4,7 +4,7 @@ import { resolvePageImage } from "@/lib/imageResolver";
 import RichTextContent from "../components/RichTextContent";
 
 export const metadata = {
-  title: "About Us | Trek Nepal",
+  title: "About Us | FUSION EXPEDITIONS",
   description:
     "Learn more about Trek Nepal, our team, and our commitment to creating memorable trekking, touring, climbing, and adventure experiences in Nepal.",
 };

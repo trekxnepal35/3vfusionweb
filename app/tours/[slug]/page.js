@@ -15,6 +15,7 @@ import { resolvePageImage, resolveImage, } from "@/lib/imageResolver";
 import Region from "@/models/Region";
 import YouTubeVideos from "@/app/components/YouTubeVideos";
 import RichTextContent from "@/app/components/RichTextContent";
+import Departure from "@/models/Departure";
 
 
 /*
@@ -204,6 +205,32 @@ export default async function TourDetailPage({
   const isBookable =
     tour.pageType?.bookable === true;
 
+
+  /*
+  =========================================
+  AVAILABLE DEPARTURES
+  =========================================
+  */
+
+  const now = new Date();
+
+  const departures = isBookable
+    ? await Departure.find({
+      experienceId: tour._id,
+      status: "open",
+      startDate: { $gte: new Date(now.toISOString().slice(0, 10)) },
+      $expr: {
+        $lt: ["$reservedPax", "$capacity"],
+      },
+      $or: [
+        { bookingDeadline: null },
+        { bookingDeadline: { $exists: false } },
+        { bookingDeadline: { $gte: now } },
+      ],
+    })
+      .sort({ startDate: 1 })
+      .lean()
+    : [];
 
   /*
   ========================================
@@ -745,6 +772,99 @@ GALLERY IMAGES
 
                 )}
 
+                {/* ================================
+    AVAILABLE DEPARTURES
+================================= */}
+
+                {isBookable && departures.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="mb-4 text-xl font-bold text-gray-900">
+                      Available Departures
+                    </h3>
+
+                    <div className="space-y-4">
+                      {departures.map((departure) => {
+                        const availablePax = Math.max(
+                          0,
+                          Number(departure.capacity || 0) -
+                          Number(departure.reservedPax || 0)
+                        );
+
+                        const startDate = new Date(
+                          departure.startDate
+                        );
+
+                        const endDate = new Date(
+                          departure.endDate
+                        );
+
+                        const dateOptions = {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        };
+
+                        const departurePrice =
+                          departure.priceOverride?.enabled === true
+                            ? departure.priceOverride
+                            : tour.price;
+
+                        const departurePricingType =
+                          departurePrice?.pricingType || "fixed";
+
+                        return (
+                          <div
+                            key={String(departure._id)}
+                            className="rounded-xl border border-gray-200 p-4"
+                          >
+                            <p className="font-semibold text-gray-900">
+                              {startDate.toLocaleDateString(
+                                "en-GB",
+                                dateOptions
+                              )}
+                              {" – "}
+                              {endDate.toLocaleDateString(
+                                "en-GB",
+                                dateOptions
+                              )}
+                            </p>
+
+                            <div className="mt-3 flex items-center justify-between text-sm">
+                              <span className="text-gray-600">
+                                Available seats
+                              </span>
+
+                              <span className="font-semibold text-gray-900">
+                                {availablePax}
+                              </span>
+                            </div>
+
+                            {departurePrice && (
+                              <div className="mt-2 text-sm text-gray-600">
+                                {departurePricingType === "fixed"
+                                  ? `Package price: ${departurePrice.currency ||
+                                  "USD"
+                                  } ${Number(
+                                    departurePrice.amount || 0
+                                  ).toLocaleString()} / person`
+                                  : "Group-based pricing available"}
+                              </div>
+                            )}
+
+                            <Link
+                              href={`/booking?experienceId=${tour._id}&experienceType=${tour.pageType.slug}&departureId=${departure._id}`}
+                              className="mt-4 block rounded-lg bg-emerald-600 px-4 py-3 text-center font-semibold text-white transition hover:bg-emerald-700"
+                            >
+                              Book This Departure
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+
 
                 {/* ================================
                     ENQUIRY
@@ -896,17 +1016,17 @@ GALLERY IMAGES
                       <div className="lg:col-span-1">
 
                         <div className="sticky top-24 overflow-hidden rounded-2xl">
-                        <Link
-                          href={tour.faqImageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block cursor-pointer"
-                        >
-                          <img
-                            src={tour.faqImageUrl}
-                            alt={`${tour.title} FAQ`}
-                            className="h-[420px] w-full object-cover"
-                          />
+                          <Link
+                            href={tour.faqImageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block cursor-pointer"
+                          >
+                            <img
+                              src={tour.faqImageUrl}
+                              alt={`${tour.title} FAQ`}
+                              className="h-[420px] w-full object-cover"
+                            />
                           </Link>
 
                         </div>

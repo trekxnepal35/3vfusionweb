@@ -11,6 +11,8 @@ import FeedbackList from "@/app/components/FeedbackList";
 import FeedbackForm from "@/app/components/FeedbackForm";
 import YouTubeVideos from "@/app/components/YouTubeVideos";
 import { resolvePageImage, resolveImage, } from "@/lib/imageResolver";
+import Departure from "@/models/Departure";
+
 
 
 async function getWellnessPage(slug) {
@@ -177,6 +179,34 @@ export default async function WellnessDetailPage({ params }) {
 
   const canBook = isBookable?.bookable === true;
 
+  /*
+  =========================================
+  AVAILABLE DEPARTURES
+  =========================================
+  */
+
+  const now = new Date();
+
+  const departures = canBook
+    ? await Departure.find({
+      experienceId: page._id,
+      status: "open",
+      startDate: {
+        $gte: new Date(now.toISOString().slice(0, 10)),
+      },
+      $expr: {
+        $lt: ["$reservedPax", "$capacity"],
+      },
+      $or: [
+        { bookingDeadline: null },
+        { bookingDeadline: { $exists: false } },
+        { bookingDeadline: { $gte: now } },
+      ],
+    })
+      .sort({ startDate: 1 })
+      .lean()
+    : [];
+
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -284,6 +314,100 @@ export default async function WellnessDetailPage({ params }) {
                 Book This Experience
               </Link>
             )}
+
+
+            {/* ================================
+    AVAILABLE DEPARTURES
+================================= */}
+
+{isBookable && departures.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="mb-4 text-xl font-bold text-gray-900">
+                      Available Departures
+                    </h3>
+
+                    <div className="space-y-4">
+                      {departures.map((departure) => {
+                        const availablePax = Math.max(
+                          0,
+                          Number(departure.capacity || 0) -
+                          Number(departure.reservedPax || 0)
+                        );
+
+                        const startDate = new Date(
+                          departure.startDate
+                        );
+
+                        const endDate = new Date(
+                          departure.endDate
+                        );
+
+                        const dateOptions = {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        };
+
+                        const departurePrice =
+                          departure.priceOverride?.enabled === true
+                            ? departure.priceOverride
+                            : wellness.price;
+
+                        const departurePricingType =
+                          departurePrice?.pricingType || "fixed";
+
+                        return (
+                          <div
+                            key={String(departure._id)}
+                            className="rounded-xl border border-gray-200 p-4"
+                          >
+                            <p className="font-semibold text-gray-900">
+                              {startDate.toLocaleDateString(
+                                "en-GB",
+                                dateOptions
+                              )}
+                              {" – "}
+                              {endDate.toLocaleDateString(
+                                "en-GB",
+                                dateOptions
+                              )}
+                            </p>
+
+                            <div className="mt-3 flex items-center justify-between text-sm">
+                              <span className="text-gray-600">
+                                Available seats
+                              </span>
+
+                              <span className="font-semibold text-gray-900">
+                                {availablePax}
+                              </span>
+                            </div>
+
+                            {departurePrice && (
+                              <div className="mt-2 text-sm text-gray-600">
+                                {departurePricingType === "fixed"
+                                  ? `Package price: ${departurePrice.currency ||
+                                  "USD"
+                                  } ${Number(
+                                    departurePrice.amount || 0
+                                  ).toLocaleString()} / person`
+                                  : "Group-based pricing available"}
+                              </div>
+                            )}
+
+                            <Link
+                              href={`/booking?experienceId=${page._id}&experienceType=${experienceType}&departureId=${departure._id}`}
+                              className="mt-4 block rounded-lg bg-emerald-600 px-4 py-3 text-center font-semibold text-white transition hover:bg-emerald-700"
+                            >
+                              Book This Departure
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
 
             <Link
               href={`/enquiry?experienceId=${page._id.toString()}&experienceType=${experienceType}`}
@@ -558,12 +682,12 @@ IMPORTANT INFORMATION
                     rel="noopener noreferrer"
                     className="block cursor-pointer"
                   >
-                  <img
-                    src={image.url}
-                    alt={image.alt || `${page.title} wellness gallery ${index + 1}`}
-                    loading="lazy"
-                    className="h-64 w-full object-cover transition duration-300 hover:scale-105"
-                  />
+                    <img
+                      src={image.url}
+                      alt={image.alt || `${page.title} wellness gallery ${index + 1}`}
+                      loading="lazy"
+                      className="h-64 w-full object-cover transition duration-300 hover:scale-105"
+                    />
                   </Link>
                 </div>
               ))}

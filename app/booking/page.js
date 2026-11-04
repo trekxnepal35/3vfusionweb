@@ -1,9 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState, } from "react";
-import { useRouter, useSearchParams, } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-
 
 /*
 ==================================================
@@ -34,10 +33,6 @@ export default function BookingPage() {
 /*
 ==================================================
 BOOKING CONTENT
-
-IMPORTANT:
-useSearchParams() lives inside this component,
-which is rendered inside the Suspense boundary.
 ==================================================
 */
 
@@ -52,8 +47,8 @@ function BookingContent() {
   */
 
   const experienceId = searchParams.get("experienceId");
-
   const experienceType = searchParams.get("experienceType");
+  const departureId = searchParams.get("departureId");
 
   /*
   ==================================================
@@ -62,8 +57,11 @@ function BookingContent() {
   */
 
   const [experience, setExperience] = useState(null);
+  const [departure, setDeparture] = useState(null);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
@@ -82,20 +80,25 @@ function BookingContent() {
     numberOfPeople: 1,
     preferredDate: "",
     message: "",
-    acceptTerms:false,
+    acceptTerms: false,
   });
-console.log("Form Data",formData)
+
   /*
   ==================================================
-  LOAD EXPERIENCE
+  LOAD EXPERIENCE AND SELECTED DEPARTURE
   ==================================================
   */
 
   useEffect(() => {
+    let isActive = true;
+
     async function loadExperience() {
       try {
         setLoading(true);
         setError("");
+
+        setExperience(null);
+        setDeparture(null);
 
         if (!experienceId) {
           throw new Error("Experience information is missing.");
@@ -130,11 +133,6 @@ console.log("Form Data",formData)
             ? page.pageType?.slug
             : page.pageType;
 
-        /*
-        If a type was provided in the URL,
-        make sure it matches the page.
-        */
-
         if (
           experienceType &&
           actualType &&
@@ -147,35 +145,88 @@ console.log("Form Data",formData)
 
         /*
         ==============================================
-        SET EXPERIENCE
+        LOAD SELECTED DEPARTURE
         ==============================================
         */
 
+        let selectedDeparture = null;
+
+        if (departureId) {
+          const departureResponse = await fetch(
+            `/api/departures/${encodeURIComponent(
+              departureId
+            )}?experienceId=${encodeURIComponent(experienceId)}`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
+
+          const departureResult = await departureResponse.json();
+
+          if (
+            !departureResponse.ok ||
+            !departureResult.success ||
+            !departureResult.data
+          ) {
+            throw new Error(
+              departureResult.message ||
+                "Selected departure is unavailable. Please select another departure."
+            );
+          }
+
+          selectedDeparture = departureResult.data;
+
+          if (
+            Number(selectedDeparture.availablePax) < 1
+          ) {
+            throw new Error(
+              "There are no available seats for this departure."
+            );
+          }
+        }
+
+        if (!isActive) return;
+
+        setDeparture(selectedDeparture);
         setExperience(page);
       } catch (error) {
-        console.error("LOAD EXPERIENCE ERROR:", error);
+        console.error("LOAD BOOKING INFORMATION ERROR:", error);
 
-        setError(
-          error.message || "Failed to load experience."
-        );
+        if (isActive) {
+          setError(
+            error.message || "Failed to load booking information."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (isActive) {
+          setLoading(false);
+        }
       }
     }
 
     loadExperience();
-  }, [experienceId, experienceType]);
+
+    return () => {
+      isActive = false;
+    };
+  }, [experienceId, experienceType, departureId]);
 
   /*
   ==================================================
   PRICE INFORMATION
+
+  Enabled departure override takes priority.
+  Otherwise, use experience pricing.
   ==================================================
   */
 
-  const price = experience?.price || {};
+  const price =
+    departure?.priceOverride?.enabled === true
+      ? departure.priceOverride
+      : experience?.price || {};
 
   const pricingType = price.pricingType || "fixed";
-
   const currency = price.currency || "USD";
 
   const paxPrices = Array.isArray(price.paxPrices)
@@ -199,8 +250,8 @@ console.log("Form Data",formData)
 
         const max =
           tier.maxPax === null ||
-            tier.maxPax === "" ||
-            typeof tier.maxPax === "undefined"
+          tier.maxPax === "" ||
+          typeof tier.maxPax === "undefined"
             ? null
             : Number(tier.maxPax);
 
@@ -264,8 +315,7 @@ console.log("Form Data",formData)
   */
 
   const estimatedTotal =
-    pricePerPerson *
-    Number(formData.numberOfPeople || 0);
+    pricePerPerson * Number(formData.numberOfPeople || 0);
 
   /*
   ==================================================
@@ -276,9 +326,7 @@ console.log("Form Data",formData)
   const actualExperienceType =
     typeof experience?.pageType === "object"
       ? experience?.pageType?.slug
-      : experience?.pageType ||
-      experienceType ||
-      "";
+      : experience?.pageType || experienceType || "";
 
   /*
   ==================================================
@@ -308,6 +356,19 @@ console.log("Form Data",formData)
 
   /*
   ==================================================
+  HANDLE TERMS CHECKBOX
+  ==================================================
+  */
+
+  function handleTermsChange(event) {
+    setFormData((previous) => ({
+      ...previous,
+      acceptTerms: event.target.checked,
+    }));
+  }
+
+  /*
+  ==================================================
   HANDLE SUBMIT
   ==================================================
   */
@@ -318,7 +379,6 @@ console.log("Form Data",formData)
     try {
       setSubmitting(true);
       setError("");
-      setSuccess(false);
 
       /*
       ==============================================
@@ -338,34 +398,44 @@ console.log("Form Data",formData)
         );
       }
 
-      if (!formData.name.trim()) {
+      if (departureId && !departure) {
         throw new Error(
-          "Please enter your name."
+          "Selected departure could not be loaded."
         );
+      }
+
+      if (!formData.name.trim()) {
+        throw new Error("Please enter your name.");
       }
 
       if (!formData.email.trim()) {
-        throw new Error(
-          "Please enter your email."
-        );
+        throw new Error("Please enter your email.");
       }
 
       if (!formData.phone.trim()) {
+        throw new Error("Please enter your phone number.");
+      }
+
+      const people = Number(formData.numberOfPeople);
+
+      if (!Number.isInteger(people) || people < 1) {
         throw new Error(
-          "Please enter your phone number."
+          "Number of people must be at least 1."
         );
       }
 
-      const people = Number(
-        formData.numberOfPeople
-      );
+      /*
+      ==============================================
+      DEPARTURE CAPACITY VALIDATION
+      ==============================================
+      */
 
       if (
-        !Number.isInteger(people) ||
-        people < 1
+        departure &&
+        people > Number(departure.availablePax)
       ) {
         throw new Error(
-          "Number of people must be at least 1."
+          `Only ${departure.availablePax} seats are available for this departure.`
         );
       }
 
@@ -378,83 +448,72 @@ console.log("Form Data",formData)
       if (pricingType === "pax_based") {
         if (!selectedTier) {
           throw new Error(
-            `No pricing tier is available for ${people} ${people === 1 ? "person" : "people"
+            `No pricing tier is available for ${people} ${
+              people === 1 ? "person" : "people"
             }.`
           );
         }
       }
-/*
+
+      /*
       ==============================================
-      Terms and Conditions
+      TERMS AND CONDITIONS
       ==============================================
       */
 
-      if (!formData.acceptTerms===true) {
-        alert("Please read the Terms and Conditions before accept it.");
-        return;
+      if (formData.acceptTerms !== true) {
+        throw new Error(
+          "Please read and accept the Terms and Conditions."
+        );
       }
-      
+
       /*
       ==============================================
       SEND BOOKING
 
       IMPORTANT:
-      We intentionally DO NOT send:
-
-      packagePrice
-      estimatedTotal
-      pricePerPerson
-
-      The server calculates those values
-      from MongoDB.
+      The server calculates prices from MongoDB.
+      We do not send client-calculated prices.
       ==============================================
       */
 
-      const response = await fetch(
-        "/api/bookings",
-        {
-          method: "POST",
+      const response = await fetch("/api/bookings", {
+        method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            experienceId,
+        body: JSON.stringify({
+          experienceId,
 
-            experienceType:
-              actualExperienceType,
+          experienceType: actualExperienceType,
 
-            name: formData.name.trim(),
+          departureId: departureId || null,
 
-            email: formData.email
-              .trim()
-              .toLowerCase(),
+          name: formData.name.trim(),
 
-            phone: formData.phone.trim(),
+          email: formData.email.trim().toLowerCase(),
 
-            country: formData.country.trim(),
+          phone: formData.phone.trim(),
 
-            numberOfPeople: people,
+          country: formData.country.trim(),
 
-            preferredDate:
-              formData.preferredDate,
+          numberOfPeople: people,
 
-            message:
-              formData.message.trim(),
+          preferredDate: formData.preferredDate,
 
-            acceptTerms:
-              formData.acceptTerms,
-          }),
-        }
-      );
+          message: formData.message.trim(),
+
+          acceptTerms: formData.acceptTerms,
+        }),
+      });
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message ||
-          "Failed to submit booking."
+          result.message || "Failed to submit booking."
         );
       }
 
@@ -465,7 +524,6 @@ console.log("Form Data",formData)
       */
 
       setSuccess(true);
-
       setBookingResult(result.data);
 
       /*
@@ -480,21 +538,33 @@ console.log("Form Data",formData)
         numberOfPeople: 1,
         preferredDate: "",
         message: "",
-        acceptTerms:false,
+        acceptTerms: false,
       });
     } catch (error) {
-      console.error(
-        "BOOKING SUBMIT ERROR:",
-        error
-      );
+      console.error("BOOKING SUBMIT ERROR:", error);
 
       setError(
-        error.message ||
-        "Failed to submit booking."
+        error.message || "Failed to submit booking."
       );
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /*
+  ==================================================
+  DATE FORMATTER
+  ==================================================
+  */
+
+  function formatDate(date) {
+    if (!date) return "Not available";
+
+    return new Date(date).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   }
 
   /*
@@ -586,9 +656,7 @@ console.log("Form Data",formData)
                     </span>
 
                     <span className="text-right font-medium">
-                      {
-                        bookingResult.experienceTitle
-                      }
+                      {bookingResult.experienceTitle}
                     </span>
                   </div>
 
@@ -598,11 +666,39 @@ console.log("Form Data",formData)
                     </span>
 
                     <span className="font-medium">
-                      {
-                        bookingResult.experienceType
-                      }
+                      {bookingResult.experienceType}
                     </span>
                   </div>
+
+                  {departure && (
+                    <>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-gray-500">
+                          Departure Start
+                        </span>
+
+                        <span className="font-medium">
+                          {formatDate(
+                            bookingResult.departureStartDate ||
+                              departure.startDate
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between gap-4">
+                        <span className="text-gray-500">
+                          Departure End
+                        </span>
+
+                        <span className="font-medium">
+                          {formatDate(
+                            bookingResult.departureEndDate ||
+                              departure.endDate
+                          )}
+                        </span>
+                      </div>
+                    </>
+                  )}
 
                   <div className="flex justify-between gap-4">
                     <span className="text-gray-500">
@@ -610,9 +706,7 @@ console.log("Form Data",formData)
                     </span>
 
                     <span className="font-medium">
-                      {
-                        bookingResult.numberOfPeople
-                      }
+                      {bookingResult.numberOfPeople}
                     </span>
                   </div>
 
@@ -622,12 +716,8 @@ console.log("Form Data",formData)
                     </span>
 
                     <span className="font-medium">
-                      {
-                        bookingResult.packageCurrency
-                      }{" "}
-                      {
-                        bookingResult.packagePrice
-                      }
+                      {bookingResult.packageCurrency}{" "}
+                      {bookingResult.packagePrice}
                     </span>
                   </div>
 
@@ -638,12 +728,8 @@ console.log("Form Data",formData)
                       </span>
 
                       <span className="text-lg font-bold">
-                        {
-                          bookingResult.packageCurrency
-                        }{" "}
-                        {
-                          bookingResult.estimatedTotal
-                        }
+                        {bookingResult.packageCurrency}{" "}
+                        {bookingResult.estimatedTotal}
                       </span>
                     </div>
                   </div>
@@ -674,9 +760,7 @@ console.log("Form Data",formData)
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-12">
 
-        {/* =========================================
-            PAGE HEADER
-        ========================================= */}
+        {/* PAGE HEADER */}
 
         <div className="mb-8">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-gray-500">
@@ -693,9 +777,7 @@ console.log("Form Data",formData)
           </p>
         </div>
 
-        {/* =========================================
-            ERROR
-        ========================================= */}
+        {/* ERROR */}
 
         {error && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
@@ -704,11 +786,10 @@ console.log("Form Data",formData)
         )}
 
         <div className="grid gap-8 lg:grid-cols-3">
-          {/* =======================================
-             Left / SUMMARY
-          ======================================= */}
 
-<aside className="lg:col-span-1">
+          {/* LEFT / SUMMARY */}
+
+          <aside className="lg:col-span-1">
             <div className="sticky top-6 overflow-hidden rounded-2xl border bg-white shadow-sm">
 
               {/* IMAGE */}
@@ -735,7 +816,29 @@ console.log("Form Data",formData)
                   {experience.title}
                 </h2>
 
-             
+                {/* SELECTED DEPARTURE */}
+
+                {departure && (
+                  <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <h3 className="font-semibold text-gray-900">
+                      Selected Departure
+                    </h3>
+
+                    <div className="mt-2 space-y-1 text-sm text-gray-700">
+                      <p>
+                        Start Date: {formatDate(departure.startDate)}
+                      </p>
+
+                      <p>
+                        End Date: {formatDate(departure.endDate)}
+                      </p>
+
+                      <p className="font-semibold">
+                        Available Seats: {departure.availablePax}
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* PRICE */}
 
@@ -746,8 +849,7 @@ console.log("Form Data",formData)
 
                   {pricePerPerson > 0 ? (
                     <p className="mt-1 text-3xl font-bold text-gray-900">
-                      {currency}{" "}
-                      {pricePerPerson}
+                      {currency} {pricePerPerson}
                     </p>
                   ) : (
                     <p className="mt-1 font-semibold text-red-600">
@@ -765,55 +867,42 @@ console.log("Form Data",formData)
                     </h3>
 
                     <div className="space-y-2">
-                      {paxPrices.map(
-                        (tier, index) => {
-                          const min = Number(
-                            tier.minPax
-                          );
+                      {paxPrices.map((tier, index) => {
+                        const min = Number(tier.minPax);
 
-                          const max =
-                            tier.maxPax === null ||
-                              tier.maxPax === "" ||
-                              typeof tier.maxPax ===
-                              "undefined"
-                              ? null
-                              : Number(
-                                tier.maxPax
-                              );
+                        const max =
+                          tier.maxPax === null ||
+                          tier.maxPax === "" ||
+                          typeof tier.maxPax === "undefined"
+                            ? null
+                            : Number(tier.maxPax);
 
-                          const label =
-                            max === null
-                              ? `${min}+ people`
-                              : min === max
-                                ? `${min} people`
-                                : `${min}-${max} people`;
+                        const label =
+                          max === null
+                            ? `${min}+ people`
+                            : min === max
+                              ? `${min} people`
+                              : `${min}-${max} people`;
 
-                          const active =
-                            selectedTier === tier;
+                        const active = selectedTier === tier;
 
-                          return (
-                            <div
-                              key={
-                                tier._id ||
-                                index
-                              }
-                              className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm ${active
-                                  ? "bg-black text-white"
-                                  : "bg-white text-gray-700"
-                                }`}
-                            >
-                              <span>
-                                {label}
-                              </span>
+                        return (
+                          <div
+                            key={tier._id || index}
+                            className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm ${
+                              active
+                                ? "bg-black text-white"
+                                : "bg-white text-gray-700"
+                            }`}
+                          >
+                            <span>{label}</span>
 
-                              <span className="font-semibold">
-                                {currency}{" "}
-                                {tier.pricePerPax}
-                              </span>
-                            </div>
-                          );
-                        }
-                      )}
+                            <span className="font-semibold">
+                              {currency} {tier.pricePerPax}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -827,8 +916,7 @@ console.log("Form Data",formData)
                     </span>
 
                     <span className="text-2xl font-bold text-gray-900">
-                      {currency}{" "}
-                      {estimatedTotal}
+                      {currency} {estimatedTotal}
                     </span>
                   </div>
                 </div>
@@ -839,23 +927,16 @@ console.log("Form Data",formData)
                   Final pricing will be confirmed
                   by our team. The displayed total
                   is calculated from the current
-                  experience pricing.
+                  {departure?.priceOverride?.enabled === true
+                    ? " departure pricing."
+                    : " experience pricing."}
                 </p>
 
-                   {/* DESCRIPTION */}
-                   
-                   {/* {experience.description && (
-                  <p className="mt-3 line-clamp-4 text-sm leading-6 text-gray-600">
-                    {experience.description}
-                  </p>
-                )}  */}
               </div>
             </div>
           </aside>
 
-          {/* =======================================
-              Right/ FORM
-          ======================================= */}
+          {/* RIGHT / FORM */}
 
           <div className="lg:col-span-2">
             <div className="rounded-2xl border bg-white p-5 shadow-sm md:p-8">
@@ -873,8 +954,7 @@ console.log("Form Data",formData)
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Please provide your contact
-                    information.
+                    Please provide your contact information.
                   </p>
                 </div>
 
@@ -998,12 +1078,19 @@ console.log("Form Data",formData)
                       name="numberOfPeople"
                       type="number"
                       min="1"
+                      max={departure ? departure.availablePax : undefined}
                       step="1"
                       value={formData.numberOfPeople}
                       onChange={handleChange}
                       required
                       className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
                     />
+
+                    {departure && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Maximum available seats: {departure.availablePax}
+                      </p>
+                    )}
 
                     {pricingType === "pax_based" && (
                       <p className="mt-2 text-xs text-gray-500">
@@ -1032,6 +1119,12 @@ console.log("Form Data",formData)
                       onChange={handleChange}
                       className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
                     />
+
+                    {departure && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Your selected departure dates are shown in the booking summary.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1056,33 +1149,33 @@ console.log("Form Data",formData)
                   />
                 </div>
 
-                {/*Terms and Conditions*/}
+                {/* TERMS AND CONDITIONS */}
 
                 <div>
                   <label
                     htmlFor="termsConditions"
                     className="mb-2 block text-sm font-medium text-gray-700"
                   >
-                    I agree to the Terms and Conditions.<Link href="/term" target="_blank" className="hover:bg-green-500 bg-amber-500 px-5 rounded-3xl">Read more</Link>
+                    I agree to the Terms and Conditions.{" "}
+                    <Link
+                      href="/term"
+                      target="_blank"
+                      className="rounded-3xl bg-amber-500 px-5 hover:bg-green-500"
+                    >
+                      Read more
+                    </Link>
                   </label>
 
                   <input
                     id="termsConditions"
-                    name="termsConditions"
+                    name="acceptTerms"
                     type="checkbox"
-                    value={formData.acceptTerms}                                 
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        acceptTerms: e.target.checked,
-                      })
-                    }
-                    className=" size-3.5  rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-black"
-                    // required
+                    checked={formData.acceptTerms}
+                    onChange={handleTermsChange}
+                    required
+                    className="size-3.5 rounded-lg border border-gray-300"
                   />
                 </div>
-
-
 
                 {/* SUBMIT */}
 
@@ -1095,14 +1188,13 @@ console.log("Form Data",formData)
                     ? "Submitting Booking..."
                     : "Submit Booking"}
                 </button>
+
               </form>
             </div>
           </div>
 
-          
         </div>
       </div>
-
     </main>
   );
 }

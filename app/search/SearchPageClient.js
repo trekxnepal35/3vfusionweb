@@ -221,18 +221,37 @@ export default function SearchPageClient() {
   */
 
   const getImageUrl = (page) => {
-
+    const type = getPageTypeSlug(page);
+  
+    // Team Profile image
+    if (type === "team" && page?.teamProfile?.photoUrl) {
+      return page.teamProfile.photoUrl;
+    }
+  
+    // Professional Guide image
     if (
-      page?.imageUrl &&
-      typeof page.imageUrl ===
-        "string"
+      (type === "guide" ||
+        type === "professional-guide") &&
+      page?.professionalGuide?.photoUrl
     ) {
+      return page.professionalGuide.photoUrl;
+    }
+  
+    // Existing Trek, Tour, and other page images
+    if (page?.cardImageUrl) {
+      return page.cardImageUrl;
+    }
+  
+    if (page?.imageUrl) {
       return page.imageUrl;
     }
-
-
-    return "";
-
+  
+    // Fallbacks for profile images
+    return (
+      page?.teamProfile?.photoUrl ||
+      page?.professionalGuide?.photoUrl ||
+      ""
+    );
   };
 
 

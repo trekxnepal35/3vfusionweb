@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema(
@@ -18,23 +19,6 @@ const bookingSchema = new mongoose.Schema(
     ========================================
     EXPERIENCE TYPE
     ========================================
-    
-    This is stored as a snapshot of the Page Type
-    at the time of booking.
-
-    It is NOT restricted to trek/tour.
-
-    Examples:
-    trek
-    tour
-    climbing
-    adventure
-    expedition
-    hiking
-    etc.
-
-    Future Page Types can also be used.
-    ========================================
     */
 
     experienceType: {
@@ -52,14 +36,33 @@ const bookingSchema = new mongoose.Schema(
 
     /*
     ========================================
-    PRICE SNAPSHOT
-    ========================================
-    
-    These values are copied from the Page when
-    the booking is created.
+    DEPARTURE
 
-    This protects the booking from future
-    price changes.
+    Optional reference.
+    Existing bookings without departures
+    continue working.
+    ========================================
+    */
+
+    departure: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Departure",
+      default: null,
+    },
+
+    departureStartDate: {
+      type: Date,
+      default: null,
+    },
+
+    departureEndDate: {
+      type: Date,
+      default: null,
+    },
+
+    /*
+    ========================================
+    PRICE SNAPSHOT
     ========================================
     */
 
@@ -143,11 +146,27 @@ const bookingSchema = new mongoose.Schema(
       trim: true,
     },
 
-    acceptTerms: 
-    { type: Boolean, 
+    acceptTerms: {
+      type: Boolean,
       default: false,
       required: true,
-     },
+    },
+    /*
+    ========================================
+    SEAT RESERVATION TRACKING
+
+    True means this booking has already
+    reserved seats in its departure.
+
+    This also supports older bookings that
+    were created before immediate reservation.
+    ========================================
+    */
+    seatsReserved: {
+      type: Boolean,
+      default: false,
+     
+    },
 
     /*
     ========================================
@@ -170,6 +189,31 @@ const bookingSchema = new mongoose.Schema(
   }
 );
 
+      
+    /*
+=========================================
+INDEXES
+=========================================
+
+Improve common admin booking queries.
+=========================================
+*/
+
+bookingSchema.index({
+  departure: 1,
+  status: 1,
+});
+
+bookingSchema.index({
+  experience: 1,
+  createdAt: -1,
+});
+
+bookingSchema.index({
+  status: 1,
+  createdAt: -1,
+});
+
 /*
 =========================================
 BOOKING MODEL
@@ -178,9 +222,6 @@ BOOKING MODEL
 
 const Booking =
   mongoose.models.Booking ||
-  mongoose.model(
-    "Booking",
-    bookingSchema
-  );
+  mongoose.model("Booking", bookingSchema);
 
 export default Booking;

@@ -24,7 +24,7 @@ export async function generateMetadata({ searchParams }) {
 
   const title =
     currentPage > 1
-      ? `Nepal Travel Blog - Page ${currentPage} | Trek X Nepal`
+      ? `Nepal Travel Blog - Page ${currentPage} | FUSION EXPEDITIONS`
       : "Nepal Travel Blog | Trekking Guides, Stories & Travel Tips";
 
   const description =
@@ -54,7 +54,7 @@ export async function generateMetadata({ searchParams }) {
           ? `${baseUrl}/blog?page=${currentPage}`
           : `${baseUrl}/blog`,
 
-      siteName: "Trek X Nepal",
+      siteName: "FUSION EXPEDITIONS",
 
       type: "website",
 
@@ -259,7 +259,7 @@ export default async function BlogPage({
 
       "@type": "WebSite",
 
-      name: "Trek X Nepal",
+      name: "FUSION EXPEDITIONS",
 
       url: baseUrl,
 
@@ -282,8 +282,8 @@ export default async function BlogPage({
 
     name:
       currentPage > 1
-        ? `Trek X Nepal Blog - Page ${currentPage}`
-        : "Trek X Nepal Blog",
+        ? `FUSION EXPEDITIONS Blog - Page ${currentPage}`
+        : "FUSION EXPEDITIONS Blog",
 
     itemListElement:
       blogs.map(

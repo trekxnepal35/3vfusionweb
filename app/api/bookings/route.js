@@ -1,27 +1,18 @@
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 
 import connectDB from "@/lib/mongodb";
 
 import Page from "@/models/Page";
 import Booking from "@/models/Booking";
 import PageType from "@/models/PageType";
+import Departure from "@/models/Departure";
 
 import { Resend } from "resend";
-
 import { verifyAdminToken } from "@/lib/auth";
 
-
-/*
-=========================================
-RESEND
-=========================================
-*/
-
-const resend = new Resend(
-  process.env.RESEND_API_KEY
-);
-
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /*
 =========================================
@@ -29,20 +20,14 @@ GET PAX PRICE
 =========================================
 */
 
-function getPaxPrice(
-  paxPrices = [],
-  numberOfPeople
-) {
-
+function getPaxPrice(paxPrices = [], numberOfPeople) {
   if (!Array.isArray(paxPrices)) {
     return null;
   }
 
   return (
     paxPrices.find((tier) => {
-
-      const min =
-        Number(tier.minPax);
+      const min = Number(tier.minPax);
 
       const max =
         tier.maxPax === null ||
@@ -51,19 +36,13 @@ function getPaxPrice(
           ? null
           : Number(tier.maxPax);
 
-
-      if (
-        !Number.isFinite(min) ||
-        min < 1
-      ) {
+      if (!Number.isFinite(min) || min < 1) {
         return false;
       }
-
 
       if (numberOfPeople < min) {
         return false;
       }
-
 
       if (
         max !== null &&
@@ -73,13 +52,10 @@ function getPaxPrice(
         return false;
       }
 
-
       return true;
-
     }) || null
   );
 }
-
 
 /*
 =========================================
@@ -88,7 +64,6 @@ HTML ESCAPE
 */
 
 function escapeHtml(value) {
-
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -97,70 +72,99 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+/*
+=========================================
+VALIDATE DEPARTURE DATE
+=========================================
+*/
+
+function validateDepartureDates(departure) {
+  const now = new Date();
+
+  if (!departure.startDate) {
+    throw new Error("Departure start date is invalid.");
+  }
+
+  const departureStart = new Date(departure.startDate);
+
+  if (Number.isNaN(departureStart.getTime())) {
+    throw new Error("Departure start date is invalid.");
+  }
+
+  /*
+  Date-only values stored at midnight remain
+  bookable throughout their calendar day.
+
+  Datetime values are checked precisely.
+  */
+
+  const isDateOnly =
+    departureStart.getUTCHours() === 0 &&
+    departureStart.getUTCMinutes() === 0 &&
+    departureStart.getUTCSeconds() === 0 &&
+    departureStart.getUTCMilliseconds() === 0;
+
+  const departureHasStarted = isDateOnly
+    ? departureStart.toISOString().slice(0, 10) <
+      now.toISOString().slice(0, 10)
+    : departureStart <= now;
+
+  if (departureHasStarted) {
+    throw new Error(
+      "This departure has already started or is no longer available."
+    );
+  }
+
+  if (departure.bookingDeadline) {
+    const deadline = new Date(departure.bookingDeadline);
+
+    if (
+      Number.isNaN(deadline.getTime()) ||
+      deadline < now
+    ) {
+      throw new Error(
+        "The booking deadline for this departure has passed."
+      );
+    }
+  }
+}
 
 /*
 =========================================
 POST BOOKING
-=========================================
 
 PUBLIC API
 
-Customer can submit a booking without
+Customers can submit bookings without
 admin authentication.
 
-Only Page Types where:
-
-bookable === true
-
+Only Page Types where bookable === true
 can create bookings.
+
+Departure seats are reserved immediately.
+Booking status remains pending.
 =========================================
 */
 
 export async function POST(request) {
-
   try {
-
-    /*
-    ========================================
-    CONNECT DATABASE
-    ========================================
-    */
-
     await connectDB();
 
-
-    /*
-    ========================================
-    READ REQUEST BODY
-    ========================================
-    */
-
-    const body =
-      await request.json();
-
-
-    /*
-    ========================================
-    CUSTOMER / EXPERIENCE DATA
-    ========================================
-    */
+    const body = await request.json();
 
     const {
       experienceId,
       experienceType,
-
+      departureId,
       name,
       email,
       phone,
       country,
-
       numberOfPeople,
       preferredDate,
       message,
       acceptTerms,
-
     } = body;
-
 
     /*
     ========================================
@@ -168,20 +172,18 @@ export async function POST(request) {
     ========================================
     */
 
-    if (!experienceId) {
-
+    if (
+      !experienceId ||
+      !mongoose.Types.ObjectId.isValid(experienceId)
+    ) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Experience information is required.",
+          message: "Valid experience information is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
 
     /*
     ========================================
@@ -193,25 +195,18 @@ export async function POST(request) {
       !experienceType ||
       typeof experienceType !== "string"
     ) {
-
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Experience type is required.",
+          message: "Experience type is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-
-    const requestedExperienceType =
-      experienceType
-        .trim()
-        .toLowerCase();
-
+    const requestedExperienceType = experienceType
+      .trim()
+      .toLowerCase();
 
     /*
     ========================================
@@ -219,50 +214,35 @@ export async function POST(request) {
     ========================================
     */
 
-    if (!name?.trim()) {
-
+    if (typeof name !== "string" || !name.trim()) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Name is required.",
+          message: "Name is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-
-    if (!email?.trim()) {
-
+    if (typeof email !== "string" || !email.trim()) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Email is required.",
+          message: "Email is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-
-    if (!phone?.trim()) {
-
+    if (typeof phone !== "string" || !phone.trim()) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Phone number is required.",
+          message: "Phone number is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
 
     /*
     ========================================
@@ -270,282 +250,274 @@ export async function POST(request) {
     ========================================
     */
 
-    const people =
-      Number(numberOfPeople);
+    const people = Number(numberOfPeople);
 
-
-    if (
-      !Number.isInteger(people) ||
-      people < 1
-    ) {
-
+    if (!Number.isInteger(people) || people < 1) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Number of people must be at least 1.",
+          message: "Number of people must be at least 1.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
+    /*
+    ========================================
+    TERMS ACCEPTANCE
+    ========================================
+    */
+
+    if (acceptTerms !== true) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "You must accept the terms and conditions.",
+        },
+        { status: 400 }
+      );
+    }
 
     /*
     ========================================
     FIND PAGE TYPE
-    ========================================
 
-    PageType can be identified by:
-
-    - slug
-    - MongoDB ObjectId
+    Supports:
+    - PageType slug
+    - PageType MongoDB ObjectId
     ========================================
     */
 
-    let pageType = null;
-
-
-    /*
-    Try slug first.
-    */
-
-    pageType =
-      await PageType.findOne({
-        slug:
-          requestedExperienceType,
-      }).lean();
-
-
-    /*
-    If slug was not found,
-    try ObjectId.
-    */
+    let pageType = await PageType.findOne({
+      slug: requestedExperienceType,
+    }).lean();
 
     if (
       !pageType &&
-      /^[0-9a-fA-F]{24}$/.test(
-        requestedExperienceType
-      )
+      /^[0-9a-fA-F]{24}$/.test(requestedExperienceType)
     ) {
-
-      pageType =
-        await PageType.findById(
-          requestedExperienceType
-        ).lean();
+      pageType = await PageType.findById(
+        requestedExperienceType
+      ).lean();
     }
 
-
-    /*
-    ========================================
-    PAGE TYPE NOT FOUND
-    ========================================
-    */
-
     if (!pageType) {
-
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid experience type.",
+          message: "Invalid experience type.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
 
     /*
     ========================================
     CHECK PAGE TYPE BOOKABLE
     ========================================
-
-    IMPORTANT:
-
-    This is the server-side protection.
-
-    Even if someone manually calls:
-
-    POST /api/bookings
-
-    they cannot create a booking for
-    a Page Type where:
-
-    bookable === false
-    ========================================
     */
 
-    if (
-      pageType.bookable === false
-    ) {
-
+    if (pageType.bookable !== true) {
       return NextResponse.json(
         {
           success: false,
           message:
             "This type of experience is not available for booking.",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
-
 
     /*
     ========================================
     FIND EXPERIENCE
     ========================================
-
-    Page.pageType is an ObjectId reference,
-    so we use pageType._id here.
-
-    We require published: true.
-
-    We populate:
-
-    name
-    slug
-    bookable
-    ========================================
     */
 
-    const experience =
-      await Page.findOne({
-
-        _id:
-          experienceId,
-
-        pageType:
-          pageType._id,
-
-        published:
-          true,
-
-      })
-        .populate(
-          "pageType",
-          "name slug bookable"
-        )
-        .lean();
-
-
-    /*
-    ========================================
-    EXPERIENCE NOT FOUND
-    ========================================
-    */
+    const experience = await Page.findOne({
+      _id: experienceId,
+      pageType: pageType._id,
+      published: true,
+    })
+      .populate("pageType", "name slug bookable")
+      .lean();
 
     if (!experience) {
-
       return NextResponse.json(
         {
           success: false,
           message:
             "Experience not found or is not published.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
-
 
     /*
     ========================================
     VERIFY ACTUAL PAGE TYPE
     ========================================
-
-    Prevents:
-
-    experienceId = Trek ID
-    experienceType = climbing
-
-    The actual Page Type must match.
-    ========================================
     */
 
-    const actualExperienceType =
-      experience.pageType?.slug
-        ?.trim()
-        .toLowerCase();
+    const actualExperienceType = experience.pageType?.slug
+      ?.trim()
+      .toLowerCase();
 
+    const requestedTypeMatches =
+      requestedExperienceType === actualExperienceType ||
+      requestedExperienceType ===
+        String(experience.pageType?._id).toLowerCase();
 
-    if (
-      !actualExperienceType ||
-      actualExperienceType !==
-        requestedExperienceType
-    ) {
-
+    if (!actualExperienceType || !requestedTypeMatches) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Experience type does not match the selected experience.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
 
     /*
     ========================================
     SECOND BOOKABLE CHECK
     ========================================
-
-    Verify the populated Page Type too.
-
-    This protects against inconsistent data.
-    ========================================
     */
 
-    if (
-      experience.pageType?.bookable === false
-    ) {
-
+    if (experience.pageType?.bookable !== true) {
       return NextResponse.json(
         {
           success: false,
           message:
             "This type of experience is not available for booking.",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
+    /*
+    ========================================
+    VALIDATE SELECTED DEPARTURE
+    ========================================
+    */
+
+    let selectedDeparture = null;
+
+    if (departureId) {
+      if (
+        typeof departureId !== "string" ||
+        !mongoose.Types.ObjectId.isValid(departureId)
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid departure selected.",
+          },
+          { status: 400 }
+        );
+      }
+
+      selectedDeparture = await Departure.findOne({
+        _id: departureId,
+        experienceId: experience._id,
+      }).lean();
+
+      if (!selectedDeparture) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Selected departure was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      if (selectedDeparture.status !== "open") {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "This departure is not open for booking.",
+          },
+          { status: 400 }
+        );
+      }
+
+      try {
+        validateDepartureDates(selectedDeparture);
+      } catch (error) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: error.message,
+          },
+          { status: 400 }
+        );
+      }
+
+      /*
+      Preliminary availability check.
+
+      The final capacity check and reservation
+      happen atomically inside the transaction.
+      */
+
+      const availablePax = Math.max(
+        0,
+        Number(selectedDeparture.capacity || 0) -
+          Number(selectedDeparture.reservedPax || 0)
+      );
+
+      if (availablePax < people) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Only ${availablePax} places are currently available for this departure.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     /*
     ========================================
     GET PRICE
+
+    Default: experience pricing
+
+    If departure custom pricing is enabled,
+    departure pricing takes priority.
     ========================================
     */
 
-    const price =
-      experience.price || {};
+    let price = experience.price || {};
 
+    let currency = price.currency || "USD";
 
-    const currency =
-      price.currency || "USD";
+    let pricingType = price.pricingType || "fixed";
 
+    if (
+      selectedDeparture &&
+      selectedDeparture.priceOverride?.enabled === true
+    ) {
+      const override = selectedDeparture.priceOverride;
 
-    const pricingType =
-      price.pricingType || "fixed";
+      currency = override.currency || currency;
 
+      pricingType = override.pricingType || "fixed";
+
+      price = {
+        currency,
+        pricingType,
+        amount: override.amount,
+        paxPrices: override.paxPrices || [],
+      };
+    }
 
     let packagePrice = 0;
-
     let estimatedTotal = 0;
-
-    let packagePriceType =
-      pricingType;
-
+    let packagePriceType = pricingType;
 
     /*
     ========================================
@@ -553,29 +525,11 @@ export async function POST(request) {
     ========================================
     */
 
-    if (
-      pricingType === "fixed"
-    ) {
-
-      packagePrice =
-        Number(
-          price.amount || 0
-        );
-
-
-      /*
-      Fixed price is treated as
-      price per person.
-      */
-
-      estimatedTotal =
-        packagePrice * people;
-
-
-      packagePriceType =
-        "fixed";
+    if (pricingType === "fixed") {
+      packagePrice = Number(price.amount || 0);
+      estimatedTotal = packagePrice * people;
+      packagePriceType = "fixed";
     }
-
 
     /*
     ========================================
@@ -583,83 +537,33 @@ export async function POST(request) {
     ========================================
     */
 
-    else if (
-      pricingType === "pax_based"
-    ) {
-
-      const tier =
-        getPaxPrice(
-          price.paxPrices,
-          people
-        );
-
-
-      /*
-      No matching PAX tier.
-      */
+    else if (pricingType === "pax_based") {
+      const tier = getPaxPrice(price.paxPrices, people);
 
       if (!tier) {
-
         return NextResponse.json(
           {
             success: false,
-            message:
-              `No pricing tier is available for ${people} ${
-                people === 1
-                  ? "person"
-                  : "people"
-              }.`,
+            message: `No pricing tier is available for ${people} ${
+              people === 1 ? "person" : "people"
+            }.`,
           },
-          {
-            status: 400,
-          }
+          { status: 400 }
         );
       }
 
-
-      /*
-      Price per person.
-      */
-
-      packagePrice =
-        Number(
-          tier.pricePerPax || 0
-        );
-
-
-      /*
-      Total price.
-      */
-
-      estimatedTotal =
-        packagePrice * people;
-
-
-      packagePriceType =
-        "pax_based";
-    }
-
-
-    /*
-    ========================================
-    INVALID PRICING TYPE
-    ========================================
-    */
-
-    else {
-
+      packagePrice = Number(tier.pricePerPax || 0);
+      estimatedTotal = packagePrice * people;
+      packagePriceType = "pax_based";
+    } else {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid pricing configuration.",
+          message: "Invalid pricing configuration.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
 
     /*
     ========================================
@@ -671,330 +575,324 @@ export async function POST(request) {
       !Number.isFinite(packagePrice) ||
       packagePrice <= 0
     ) {
-
       return NextResponse.json(
         {
           success: false,
           message:
             "This experience does not have a valid price.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
-
 
     if (
       !Number.isFinite(estimatedTotal) ||
       estimatedTotal <= 0
     ) {
-
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Unable to calculate booking total.",
+          message: "Unable to calculate booking total.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-
     /*
     ========================================
-    CREATE BOOKING
+    PREPARE BOOKING DATA
     ========================================
     */
 
-    const booking =
-      await Booking.create({
+    const bookingData = {
+      experience: experience._id,
+      experienceType: actualExperienceType,
+      experienceTitle: experience.title,
 
-        /*
-        Experience
-        */
+      departure: selectedDeparture?._id || null,
+      departureStartDate:
+        selectedDeparture?.startDate || null,
+      departureEndDate:
+        selectedDeparture?.endDate || null,
 
-        experience:
-          experience._id,
+      packagePrice,
+      packageCurrency: currency,
+      packagePriceType,
+      estimatedTotal,
 
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
 
-        /*
-        Dynamic Page Type snapshot.
-        */
+      country:
+        typeof country === "string"
+          ? country.trim()
+          : "",
 
-        experienceType:
-          actualExperienceType,
+      numberOfPeople: people,
 
-        experienceTitle:
-          experience.title,
+      preferredDate:
+        typeof preferredDate === "string"
+          ? preferredDate.trim()
+          : "",
 
+      message:
+        typeof message === "string"
+          ? message.trim()
+          : "",
 
-        /*
-        Price snapshot
-        */
+      acceptTerms: true,
+      status: "pending",
 
-        packagePrice,
+      /*
+      Departure bookings reserve seats immediately.
+      Bookings without a departure reserve no seats.
+      */
 
-        packageCurrency:
-          currency,
+      seatsReserved: Boolean(selectedDeparture),
+    };
 
-        packagePriceType,
+    /*
+    ========================================
+    CREATE BOOKING AND RESERVE SEATS
 
-        estimatedTotal,
+    Both operations happen in one transaction.
 
+    If either operation fails, neither is committed.
+    ========================================
+    */
 
-        /*
-        Customer information
-        */
+    let booking;
 
-        name:
-          name.trim(),
+    if (selectedDeparture) {
+      const session = await mongoose.startSession();
 
-        email:
-          email.trim().toLowerCase(),
+      try {
+        await session.withTransaction(async () => {
+          const currentDeparture = await Departure.findOne({
+            _id: selectedDeparture._id,
+            experienceId: experience._id,
+          }).session(session);
 
-        phone:
-          phone.trim(),
+          if (!currentDeparture) {
+            throw new Error(
+              "Selected departure was not found."
+            );
+          }
 
-        country:
-          country?.trim() || "",
+          if (currentDeparture.status !== "open") {
+            throw new Error(
+              "This departure is no longer open for booking."
+            );
+          }
 
-        numberOfPeople:
-          people,
+          validateDepartureDates(currentDeparture);
 
-        preferredDate:
-          preferredDate?.trim() || "",
+          /*
+          Atomic capacity check and seat reservation.
 
-        message:
-          message?.trim() || "",
+          This prevents two customers from booking
+          the same remaining seats simultaneously.
+          */
 
-        acceptTerms:
-          acceptTerms,
+          const reservationResult = await Departure.updateOne(
+            {
+              _id: currentDeparture._id,
+              status: "open",
+              $expr: {
+                $lte: [
+                  {
+                    $add: [
+                      { $ifNull: ["$reservedPax", 0] },
+                      people,
+                    ],
+                  },
+                  "$capacity",
+                ],
+              },
+            },
+            {
+              $inc: {
+                reservedPax: people,
+              },
+            },
+            { session }
+          );
 
+          if (reservationResult.modifiedCount !== 1) {
+            const available = Math.max(
+              0,
+              Number(currentDeparture.capacity || 0) -
+                Number(currentDeparture.reservedPax || 0)
+            );
 
-        /*
-        Initial status
-        */
+            throw new Error(
+              `Only ${available} places are currently available for this departure.`
+            );
+          }
 
-        status:
-          "pending",
+          /*
+          Use the departure dates loaded inside
+          the transaction for the booking snapshot.
+          */
+
+          bookingData.departureStartDate =
+            currentDeparture.startDate;
+
+          bookingData.departureEndDate =
+            currentDeparture.endDate;
+
+          const newBooking = new Booking(bookingData);
+
+          await newBooking.save({ session });
+
+          booking = newBooking;
+        });
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      booking = await Booking.create({
+        ...bookingData,
+        seatsReserved: false,
       });
-
+    }
 
     /*
     ========================================
     SEND EMAIL
+
+    Email failure does not undo a valid booking.
     ========================================
     */
 
     let emailSent = false;
-
     let emailError = null;
 
-
     try {
-
-      const bookingEmail =
-        process.env.BOOKING_EMAIL;
-
-
-      /*
-      Only attempt email when
-      BOOKING_EMAIL is configured.
-      */
+      const bookingEmail = process.env.BOOKING_EMAIL;
 
       if (bookingEmail) {
+        const departureEmailHtml = selectedDeparture
+          ? `
+            <h3>Selected Departure</h3>
 
-        const emailResult =
-          await resend.emails.send({
+            <p>
+              <strong>Departure ID:</strong>
+              ${escapeHtml(selectedDeparture._id)}
+            </p>
 
-            from:
-              process.env.RESEND_FROM_EMAIL ||
-              "Booking <onboarding@resend.dev>",
+            <p>
+              <strong>Start Date:</strong>
+              ${escapeHtml(
+                new Date(
+                  booking.departureStartDate
+                ).toLocaleDateString()
+              )}
+            </p>
 
-            to: [
-              bookingEmail,
-            ],
+            <p>
+              <strong>End Date:</strong>
+              ${escapeHtml(
+                new Date(
+                  booking.departureEndDate
+                ).toLocaleDateString()
+              )}
+            </p>
+          `
+          : `
+            <p>
+              <strong>Departure:</strong>
+              No scheduled departure selected.
+            </p>
+          `;
 
-            subject:
-              `New ${actualExperienceType} Booking - ${experience.title}`,
+        const emailResult = await resend.emails.send({
+          from:
+            process.env.RESEND_FROM_EMAIL ||
+            "Booking <onboarding@resend.dev>",
 
-            html: `
-              <div
-                style="
-                  font-family: Arial, sans-serif;
-                  line-height: 1.6;
-                  max-width: 700px;
-                  margin: auto;
-                "
-              >
+          to: [bookingEmail],
 
-                <h2>
-                  New Booking Received
-                </h2>
+          subject: `New ${actualExperienceType} Booking - ${experience.title}`,
 
-                <hr />
+          html: `
+            <div
+              style="
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                max-width: 700px;
+                margin: auto;
+              "
+            >
+              <h2>New Booking Received</h2>
 
-                <h3>
-                  Experience
-                </h3>
+              <hr />
 
-                <p>
-                  <strong>Type:</strong>
-                  ${escapeHtml(
-                    actualExperienceType
-                  )}
-                </p>
+              <h3>Experience</h3>
 
-                <p>
-                  <strong>Title:</strong>
-                  ${escapeHtml(
-                    experience.title
-                  )}
-                </p>
+              <p>
+                <strong>Type:</strong>
+                ${escapeHtml(actualExperienceType)}
+              </p>
 
-                <h3>
-                  Customer Information
-                </h3>
+              <p>
+                <strong>Title:</strong>
+                ${escapeHtml(experience.title)}
+              </p>
 
-                <p>
-                  <strong>Name:</strong>
-                  ${escapeHtml(name)}
-                </p>
+              ${departureEmailHtml}
 
-                <p>
-                  <strong>Email:</strong>
-                  ${escapeHtml(email)}
-                </p>
+              <h3>Customer Information</h3>
 
-                <p>
-                  <strong>Phone:</strong>
-                  ${escapeHtml(phone)}
-                </p>
+              <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+              <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+              <p><strong>Phone:</strong> ${escapeHtml(phone)}</p>
+              <p><strong>Country:</strong> ${escapeHtml(country || "Not provided")}</p>
 
-                <p>
-                  <strong>Country:</strong>
-                  ${escapeHtml(
-                    country ||
-                    "Not provided"
-                  )}
-                </p>
+              <h3>Booking Information</h3>
 
-                <h3>
-                  Booking Information
-                </h3>
+              <p><strong>Number of People:</strong> ${people}</p>
+              <p><strong>Preferred Date:</strong> ${escapeHtml(preferredDate || "Not provided")}</p>
 
-                <p>
-                  <strong>Number of People:</strong>
-                  ${people}
-                </p>
+              <h3>Price</h3>
 
-                <p>
-                  <strong>Preferred Date:</strong>
-                  ${escapeHtml(
-                    preferredDate ||
-                    "Not provided"
-                  )}
-                </p>
+              <p><strong>Pricing Type:</strong> ${escapeHtml(packagePriceType)}</p>
+              <p><strong>Price Per Person:</strong> ${escapeHtml(currency)} ${packagePrice}</p>
+              <p><strong>Estimated Total:</strong> ${escapeHtml(currency)} ${estimatedTotal}</p>
 
-                <h3>
-                  Price
-                </h3>
+              <h3>Customer Message</h3>
 
-                <p>
-                  <strong>Pricing Type:</strong>
-                  ${escapeHtml(
-                    packagePriceType
-                  )}
-                </p>
+              <p>${escapeHtml(message || "No message provided.")}</p>
 
-                <p>
-                  <strong>Price Per Person:</strong>
-                  ${escapeHtml(currency)}
-                  ${packagePrice}
-                </p>
+              <h3>Terms and Conditions</h3>
+              <p>Accepted</p>
 
-                <p>
-                  <strong>Estimated Total:</strong>
-                  ${escapeHtml(currency)}
-                  ${estimatedTotal}
-                </p>
+              <hr />
 
-                <h3>
-                  Customer Message
-                </h3>
-
-                <p>
-                  ${escapeHtml(
-                    message ||
-                    "No message provided."
-                  )}
-                </p>
-
-                <h3>
-                  Terms and Conditions
-                </h3>
-                <p>
-                  ${escapeHtml(
-                    acceptTerms ||
-                    "No message provided."
-                  )}
-                </p>
-
-                <hr />
-
-                <p>
-                  <strong>Booking ID:</strong>
-                  ${booking._id}
-                </p>
-
-                <p>
-                  <strong>Status:</strong>
-                  Pending
-                </p>
-
-              </div>
-            `,
-          });
-
-
-        /*
-        ========================================
-        CHECK RESEND ERROR
-        ========================================
-        */
+              <p><strong>Booking ID:</strong> ${escapeHtml(booking._id)}</p>
+              <p><strong>Status:</strong> Pending</p>
+              <p><strong>Seats Reserved:</strong> ${selectedDeparture ? "Yes" : "No scheduled departure"}</p>
+            </div>
+          `,
+        });
 
         if (emailResult?.error) {
-
           emailError =
             emailResult.error.message ||
             "Email sending failed.";
-
         } else {
-
           emailSent = true;
         }
-
       } else {
-
-        emailError =
-          "BOOKING_EMAIL is not configured.";
+        emailError = "BOOKING_EMAIL is not configured.";
       }
-
     } catch (error) {
-
-      console.error(
-        "Booking email error:",
-        error
-      );
+      console.error("Booking email error:", error);
 
       emailError =
-        error.message ||
-        "Email sending failed.";
+        error.message || "Email sending failed.";
     }
-
 
     /*
     ========================================
@@ -1005,122 +903,85 @@ export async function POST(request) {
     return NextResponse.json(
       {
         success: true,
-
-        message:
-          "Booking submitted successfully.",
+        message: "Booking submitted successfully.",
 
         data: {
+          id: booking._id,
+          experienceTitle: experience.title,
+          experienceType: actualExperienceType,
 
-          id:
-            booking._id,
+          departureId:
+            selectedDeparture?._id || null,
 
-          experienceTitle:
-            experience.title,
+          departureStartDate:
+            booking.departureStartDate || null,
 
-          experienceType:
-            actualExperienceType,
+          departureEndDate:
+            booking.departureEndDate || null,
 
           packagePrice,
-
-          packageCurrency:
-            currency,
-
+          packageCurrency: currency,
           packagePriceType,
-
-          numberOfPeople:
-            people,
-
+          numberOfPeople: people,
           estimatedTotal,
-
-          status:
-            booking.status,
-
-          acceptTerms:
-          acceptTerms,
-
+          status: booking.status,
+          seatsReserved: booking.seatsReserved,
+          acceptTerms: true,
           emailSent,
-
           emailError,
         },
       },
-      {
-        status: 201,
-      }
+      { status: 201 }
     );
-
   } catch (error) {
+    console.error("POST /api/bookings error:", error);
 
-    console.error(
-      "POST /api/bookings error:",
-      error
-    );
-
-
-    /*
-    ========================================
-    MONGOOSE VALIDATION ERROR
-    ========================================
-    */
-
-    if (
-      error.name ===
-      "ValidationError"
-    ) {
-
+    if (error.name === "ValidationError") {
       return NextResponse.json(
         {
           success: false,
+          message: "Booking validation failed.",
 
-          message:
-            "Booking validation failed.",
-
-          errors:
-            Object.fromEntries(
-              Object.entries(
-                error.errors
-              ).map(
-                ([key, value]) => [
-                  key,
-                  value.message,
-                ]
-              )
-            ),
+          errors: Object.fromEntries(
+            Object.entries(error.errors).map(
+              ([key, value]) => [
+                key,
+                value.message,
+              ]
+            )
+          ),
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
+    const message =
+      error.message || "Failed to create booking.";
 
-    /*
-    ========================================
-    GENERAL ERROR
-    ========================================
-    */
+    const isDepartureConflict =
+      message.includes("places are currently available") ||
+      message.includes("no longer open for booking") ||
+      message.includes("booking deadline") ||
+      message.includes("already started");
 
     return NextResponse.json(
       {
         success: false,
-
-        message:
-          "Failed to create booking.",
-
-        error:
-          error.message,
+        message: isDepartureConflict
+          ? message
+          : "Failed to create booking.",
+        error: message,
       },
       {
-        status: 500,
+        status: isDepartureConflict ? 409 : 500,
       }
     );
   }
 }
 
-
 /*
 =========================================
 GET BOOKINGS
-=========================================
 
 ADMIN ONLY
 
@@ -1129,124 +990,63 @@ GET /api/bookings
 */
 
 export async function GET(request) {
-
   try {
-
-    /*
-    ========================================
-    CONNECT DATABASE
-    ========================================
-    */
-
     await connectDB();
 
+    const token = request.cookies.get(
+      "admin_token"
+    )?.value;
 
-    /*
-    ========================================
-    GET ADMIN TOKEN
-    ========================================
-    */
-
-    const token =
-      request.cookies.get(
-        "admin_token"
-      )?.value;
-
-
-    /*
-    ========================================
-    VERIFY ADMIN
-    ========================================
-    */
-
-    const admin =
-      verifyAdminToken(token);
-
+    const admin = verifyAdminToken(token);
 
     if (!admin) {
-
       return NextResponse.json(
         {
           success: false,
-
           message:
             "Unauthorized. Admin access required.",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-
-    /*
-    ========================================
-    GET BOOKINGS
-    ========================================
-    */
-
-    const bookings =
-      await Booking.find()
-        .populate(
-          {
-            path: "experience",
-            select:
-              "title slug pageType imageUrl price",
-            populate: {
-              path: "pageType",
-              select:
-                "name slug bookable",
-            },
-          }
-        )
-        .sort({
-          createdAt: -1,
-        })
-        .lean();
-
-
-    /*
-    ========================================
-    RESPONSE
-    ========================================
-    */
+    const bookings = await Booking.find()
+      .populate({
+        path: "experience",
+        select: "title slug pageType imageUrl price",
+        populate: {
+          path: "pageType",
+          select: "name slug bookable",
+        },
+      })
+      .populate({
+        path: "departure",
+        select:
+          "startDate endDate bookingDeadline capacity reservedPax status",
+      })
+      .sort({
+        createdAt: -1,
+      })
+      .lean();
 
     return NextResponse.json(
       {
         success: true,
-
-        count:
-          bookings.length,
-
-        data:
-          bookings,
+        count: bookings.length,
+        data: bookings,
       },
-      {
-        status: 200,
-      }
+      { status: 200 }
     );
-
   } catch (error) {
-
-    console.error(
-      "GET /api/bookings error:",
-      error
-    );
-
+    console.error("GET /api/bookings error:", error);
 
     return NextResponse.json(
       {
         success: false,
-
-        message:
-          "Failed to fetch bookings.",
-
-        error:
-          error.message,
+        message: "Failed to fetch bookings.",
+        error: error.message,
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

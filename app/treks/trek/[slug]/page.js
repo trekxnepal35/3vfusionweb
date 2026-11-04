@@ -15,6 +15,7 @@ import SectionCollapse from "@/app/components/SectionCollapse";
 import YouTubeVideos from "@/app/components/YouTubeVideos";
 import { resolvePageImage, resolveImage, } from "@/lib/imageResolver";
 import RichTextContent from "@/app/components/RichTextContent";
+import Departure from "@/models/Departure";
 
 
 
@@ -211,6 +212,33 @@ export default async function TrekDetailPage({
   const isBookable =
     trek.pageType?.bookable === true;
 
+  /*
+=========================================
+AVAILABLE DEPARTURES
+=========================================
+*/
+
+  const now = new Date();
+
+  const departures = isBookable
+    ? await Departure.find({
+      experienceId: trek._id,
+      status: "open",
+      startDate: { $gte: now },
+      $expr: {
+        $lt: ["$reservedPax", "$capacity"],
+      },
+      $or: [
+        { bookingDeadline: null },
+        { bookingDeadline: { $gte: now } },
+      ],
+    })
+      .select(
+        "_id startDate endDate bookingDeadline capacity reservedPax priceOverride"
+      )
+      .sort({ startDate: 1 })
+      .lean()
+    : [];
 
   /*
   ========================================
@@ -754,23 +782,116 @@ GALLERY IMAGES
 
                 )}
 
+                      {/* ================================
+    GENERAL BOOKING
+================================= */}
 
-                {/* ================================
-                    BOOKING
-                ================================= */}
-
-                {isBookable && (
-
+{isBookable && (
                   <Link
                     href={`/booking?experienceId=${trek._id}&experienceType=${trek.pageType.slug}`}
-                    className="mt-8 block rounded-lg bg-gray-900 px-6 py-4 text-center font-semibold text-white transition hover:bg-gray-700"
+                    className={`block rounded-lg bg-gray-900 px-6 py-4 text-center font-semibold text-white transition hover:bg-gray-700 ${departures.length > 0 ? "mt-4" : "mt-8"
+                      }`}
                   >
-
                     Book This Trek
-
                   </Link>
-
                 )}
+
+
+                {/* ================================
+    AVAILABLE DEPARTURES
+================================= */}
+
+                {isBookable && departures.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="mb-4 text-xl font-bold text-gray-900">
+                      Available Departures
+                    </h3>
+
+                    <div className="space-y-4">
+                      {departures.map((departure) => {
+                        const availablePax = Math.max(
+                          0,
+                          Number(departure.capacity || 0) -
+                          Number(departure.reservedPax || 0)
+                        );
+
+                        const startDate = new Date(
+                          departure.startDate
+                        );
+
+                        const endDate = new Date(
+                          departure.endDate
+                        );
+
+                        const dateOptions = {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        };
+
+                        const departurePrice =
+                          departure.priceOverride?.enabled === true
+                            ? departure.priceOverride
+                            : trek.price;
+
+                        const departurePricingType =
+                          departurePrice?.pricingType || "fixed";
+
+                        return (
+                          <div
+                            key={String(departure._id)}
+                            className="rounded-xl border border-gray-200 p-4"
+                          >
+                            <p className="font-semibold text-gray-900">
+                              {startDate.toLocaleDateString(
+                                "en-GB",
+                                dateOptions
+                              )}
+                              {" – "}
+                              {endDate.toLocaleDateString(
+                                "en-GB",
+                                dateOptions
+                              )}
+                            </p>
+
+                            <div className="mt-3 flex items-center justify-between text-sm">
+                              <span className="text-gray-600">
+                                Available seats
+                              </span>
+
+                              <span className="font-semibold text-gray-900">
+                                {availablePax}
+                              </span>
+                            </div>
+
+                            {departurePrice && (
+                              <div className="mt-2 text-sm text-gray-600">
+                                {departurePricingType === "fixed"
+                                  ? `Package price: ${departurePrice.currency ||
+                                  "USD"
+                                  } ${Number(
+                                    departurePrice.amount || 0
+                                  ).toLocaleString()} / person`
+                                  : "Group-based pricing available"}
+                              </div>
+                            )}
+
+                            <Link
+                              href={`/booking?experienceId=${trek._id}&experienceType=${trek.pageType.slug}&departureId=${departure._id}`}
+                              className="mt-4 block rounded-lg bg-emerald-600 px-4 py-3 text-center font-semibold text-white transition hover:bg-emerald-700"
+                            >
+                              Book This Departure
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+
+          
+
 
 
                 {/* ================================
@@ -933,21 +1054,21 @@ IMPORTANT INFORMATION
 
                         <div className="sticky top-24 overflow-hidden rounded-2xl transition-all duration-300">
 
-                        <Link
-                          href={trek.faqImageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block cursor-pointer"
-                        >
-                          <img
-                            src={trek.faqImageUrl}
-                            alt={`${trek.title} FAQ`}
-                            className="h-[520px] w-full object-cover"
-                          />
-                          
+                          <Link
+                            href={trek.faqImageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block cursor-pointer"
+                          >
+                            <img
+                              src={trek.faqImageUrl}
+                              alt={`${trek.title} FAQ`}
+                              className="h-[520px] w-full object-cover"
+                            />
+
                           </Link>
                         </div>
-                       
+
                       </div>
 
                     )}

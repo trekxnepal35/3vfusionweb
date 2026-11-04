@@ -50,17 +50,17 @@ export const metadata = {
 
   authors: [
     {
-      name: "Trek X Nepal",
+      name: "FUSION EXPEDITIONS",
     },
   ],
 
 
   creator:
-    "Trek X Nepal",
+    "FUSION EXPEDITIONS",
 
 
   publisher:
-    "Trek X Nepal",
+    "FUSION EXPEDITIONS",
 
 
   metadataBase:
@@ -82,7 +82,7 @@ export const metadata = {
     locale: "en_US",
 
     siteName:
-      " Fusion Expeditions Trek X Nepal",
+      " Fusion Expeditions ",
 
     title:
       " Fusion Expeditions | Himalayan Treks & Tours",

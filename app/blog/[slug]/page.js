@@ -90,7 +90,7 @@ export async function generateMetadata({ params }) {
 
   if (!blog) {
     return {
-      title: "Blog Not Found | Trek X Nepal",
+      title: "Blog Not Found | FUSION EXPEDITIONS",
 
       description:
         "The requested blog article could not be found.",
@@ -119,12 +119,12 @@ export async function generateMetadata({ params }) {
   const title =
     seo.metaTitle?.trim() ||
     blog.title ||
-    "Nepal Travel Blog | Trek X Nepal";
+    "FUSION EXPEDITIONS Blog | FUSION EXPEDITIONS";
 
   const description =
     seo.metaDescription?.trim() ||
     blog.description?.trim() ||
-    "Read trekking guides, travel stories, and useful travel tips from Trek X Nepal.";
+    "Read trekking guides, travel stories, and useful travel tips from FUSION EXPEDITIONS.";
 
   const keywords = Array.isArray(seo.keywords)
     ? seo.keywords.filter(
@@ -223,7 +223,7 @@ export async function generateMetadata({ params }) {
 
       url: canonicalUrl,
 
-      siteName: "Trek X Nepal",
+      siteName: "FUSION EXPEDITIONS",
 
       type: "article",
 
@@ -234,7 +234,7 @@ export async function generateMetadata({ params }) {
               url: ogImage,
               alt:
                 blog.title ||
-                "Trek X Nepal Blog",
+                "FUSION EXPEDITIONS Blog",
             },
           ],
         }
