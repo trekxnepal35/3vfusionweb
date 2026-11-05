@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+
 import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -26,12 +26,7 @@ PROJECT ROOT, regardless of where the
 command is executed from.
 */
 
-dotenv.config({
-  path: path.resolve(
-    __dirname,
-    "../.env.local"
-  ),
-});
+
 
 
 /*
