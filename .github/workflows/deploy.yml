@@ -64,6 +64,7 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/lightsail_key
           chmod 600 ~/.ssh/lightsail_key
+          ssh-keygen -y -f ~/.ssh/lightsail_key > /dev/null
           ssh-keyscan -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
 
       # 7. Upload release
