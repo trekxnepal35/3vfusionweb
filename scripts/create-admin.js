@@ -27,19 +27,16 @@ command is executed from.
 */
 
 dotenv.config({
-  path: "/etc/3vfusionweb/production.env",
+  path: path.resolve(
+    __dirname,
+    "../.env.local"
+  ),
 });
-  
-
-
-
-
 
 
 /*
 ====================================================
 CHECK MONGODB_URI
-Update the environment loading section
 ====================================================
 */
 
