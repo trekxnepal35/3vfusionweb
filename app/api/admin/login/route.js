@@ -202,24 +202,15 @@ export async function POST(request) {
     // SET ADMIN COOKIE
     // =====================================================
 
-    response.cookies.set(
-      "admin_token",
-      token,
-      {
-        httpOnly: true,
+    const forwardedProto = request.headers.get("x-forwarded-proto");
 
-        secure:
-          process.env.NODE_ENV ===
-          "production",
-
-        sameSite: "lax",
-
-        maxAge:
-          60 * 60 * 24,
-
-        path: "/",
-      }
-    );
+    response.cookies.set("admin_token", token, {
+      httpOnly: true,
+      secure: forwardedProto === "https",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24,
+      path: "/",
+    });
 
 
     // =====================================================
