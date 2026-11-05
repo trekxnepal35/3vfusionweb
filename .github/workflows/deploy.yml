@@ -1,0 +1,88 @@
+
+name: Deploy Next.js to AWS Lightsail
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js application
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL }}
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm run build
+
+      - name: Prepare standalone build
+        run: |
+          mkdir -p .next/standalone/.next
+          cp -a .next/static .next/standalone/.next/static
+          if [ -d public ]; then
+            cp -a public .next/standalone/public
+          fi
+          tar -czf release.tar.gz -C .next/standalone .
+
+      - name: Configure SSH
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/lightsail_key
+          chmod 600 ~/.ssh/lightsail_key
+          ssh-keyscan -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          scp -i ~/.ssh/lightsail_key \
+            release.tar.gz \
+            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST:/tmp/3vfusionweb-${GITHUB_SHA}.tar.gz"
+
+      - name: Deploy and restart application
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          ssh -i ~/.ssh/lightsail_key \
+            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST" \
+            "set -e &&
+             mkdir -p /var/www/3vfusionweb/releases/${GITHUB_SHA} &&
+             tar -xzf /tmp/3vfusionweb-${GITHUB_SHA}.tar.gz -C /var/www/3vfusionweb/releases/${GITHUB_SHA} &&
+             ln -sfn /var/www/3vfusionweb/releases/${GITHUB_SHA} /var/www/3vfusionweb/current &&
+             cd /var/www/3vfusionweb &&
+             pm2 startOrReload ecosystem.config.cjs --update-env &&
+             pm2 save &&
+             rm -f /tmp/3vfusionweb-${GITHUB_SHA}.tar.gz"
+
+      - name: Remove temporary SSH key
+        if: always()
+        run: rm -f ~/.ssh/lightsail_key
