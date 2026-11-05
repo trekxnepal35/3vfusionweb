@@ -357,19 +357,19 @@ export async function POST(request) {
           `pages/${Date.now()}-${safeName}${extension}`;
 
 
-          
-        await s3.send(
-          new PutObjectCommand({
-            Bucket:
-              process.env.AWS_S3_BUCKET_NAME,
 
-            Key: key,
+          await s3().send(
+            new PutObjectCommand({
+              Bucket:
+                process.env.AWS_S3_BUCKET_NAME,
 
-            Body: buffer,
+              Key: key,
 
-            ContentType: file.type,
-          })
-        );
+              Body: buffer,
+
+              ContentType: file.type,
+            })
+          );
 
 
         /*
