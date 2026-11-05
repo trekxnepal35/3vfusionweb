@@ -1,6 +1,7 @@
 import connectDB from "@/lib/mongodb";
 import Page from "@/models/Page";
 import Region from "@/models/Region";
+export const dynamic = "force-dynamic";
 
 
 export default async function sitemap() {
