@@ -137,7 +137,7 @@ export const metadata = {
 ROOT LAYOUT
 =========================================
 */
-
+export const dynamic = "force-dynamic";
 export default async function RootLayout({
   children,
 }) {
