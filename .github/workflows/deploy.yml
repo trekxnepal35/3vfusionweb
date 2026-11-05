@@ -58,14 +58,14 @@ jobs:
           chmod 600 ~/.ssh/lightsail_key
           ssh-keyscan -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload release
-        env:
-          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
-        run: |
-          scp -i ~/.ssh/lightsail_key \
-            release.tar.gz \
-            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST:/tmp/3vfusionweb-${GITHUB_SHA}.tar.gz"
+          - name: Upload release
+          env:
+            LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+            LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          run: |
+            scp -i ~/.ssh/lightsail_key \
+              release.tar.gz \
+              "${LIGHTSAIL_USER}@${LIGHTSAIL_HOST}:/tmp/3vfusionweb-${GITHUB_SHA}.tar.gz"
 
       - name: Deploy and restart application
         env:
