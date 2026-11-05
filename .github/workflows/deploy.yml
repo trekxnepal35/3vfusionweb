@@ -45,6 +45,25 @@ jobs:
       # 5. Prepare standalone build
       - name: Prepare standalone build
         run: |
+          echo "Checking Next.js standalone build..."
+
+          if [ ! -f .next/standalone/server.js ]; then
+            echo "ERROR: Standalone server.js was not generated."
+            echo "Contents of .next directory:"
+            ls -lah .next/
+            echo "Searching for server.js:"
+            find .next -name "server.js"
+            exit 1
+          fi
+
+          if [ ! -f .next/standalone/package.json ]; then
+            echo "ERROR: Standalone package.json is missing."
+            exit 1
+          fi
+
+          echo "Standalone build verified."
+          ls -lah .next/standalone/
+
           mkdir -p .next/standalone/.next
           cp -a .next/static .next/standalone/.next/static
 
@@ -54,6 +73,8 @@ jobs:
 
           tar -czf release.tar.gz -C .next/standalone .
 
+          echo "Deployment archive created successfully."
+
       # 6. Configure SSH
       - name: Configure SSH
         env:
@@ -62,9 +83,13 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/lightsail_key
+
+          printf '%s\n' "$LIGHTSAIL_SSH_KEY" | tr -d '\r' > ~/.ssh/lightsail_key
+
           chmod 600 ~/.ssh/lightsail_key
+
           ssh-keygen -y -f ~/.ssh/lightsail_key > /dev/null
+
           ssh-keyscan -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
 
       # 7. Upload release
@@ -88,6 +113,7 @@ jobs:
             "set -e &&
              mkdir -p /var/www/3vfusionweb/releases/${GITHUB_SHA} &&
              tar -xzf /tmp/3vfusionweb-${GITHUB_SHA}.tar.gz -C /var/www/3vfusionweb/releases/${GITHUB_SHA} &&
+             test -f /var/www/3vfusionweb/releases/${GITHUB_SHA}/server.js &&
              ln -sfn /var/www/3vfusionweb/releases/${GITHUB_SHA} /var/www/3vfusionweb/current &&
              cd /var/www/3vfusionweb &&
              pm2 startOrReload ecosystem.config.cjs --update-env &&
