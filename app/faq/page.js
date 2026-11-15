@@ -101,7 +101,7 @@ export default async function FaqsPage() {
 
                                             <p className="whitespace-pre-line leading-7 text-gray-600">
                                               
-                                                <RichTextContent answer={faq.answer}/>
+                                                <RichTextContent content={faq.answer}/>
                                                 
                                             </p>
 

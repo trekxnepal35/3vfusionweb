@@ -89,7 +89,7 @@ export default async function TermsPage() {
 
                                     <div className="whitespace-pre-line text-justify mt-5 text-base leading-8 text-slate-600">
                                        
-                                        <RichTextContent answer={item.answer}/>
+                                        <RichTextContent content={item.answer}/>
                                     </div>
                                     <br />
 

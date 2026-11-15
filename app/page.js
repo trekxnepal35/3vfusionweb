@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { FaTripadvisor } from "react-icons/fa";
+import RichTextContent from "./components/RichTextContent";
 
 
 /*
@@ -1132,7 +1133,8 @@ FETCH FAQS
                               <div className="mt-4 border-t border-gray-100 pt-4">
 
                                 <p className="whitespace-pre-line leading-7 text-gray-600">
-                                  {faq.answer}
+                                 
+                                 <RichTextContent content={faq.answer}/>
                                 </p>
 
                               </div>
