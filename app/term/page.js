@@ -1,5 +1,6 @@
 // import { base64url } from "jose";
 import Link from "next/link";
+import RichTextContent from "../components/RichTextContent";
 
 async function getTermsPage() {
     const baseUrl = process.env.baseUrl
@@ -87,7 +88,8 @@ export default async function TermsPage() {
                                     </h5>
 
                                     <div className="whitespace-pre-line text-justify mt-5 text-base leading-8 text-slate-600">
-                                        {item.answer}
+                                       
+                                        <RichTextContent answer={item.answer}/>
                                     </div>
                                     <br />
 

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import RichTextContent from "../components/RichTextContent";
 
 async function getFaqsPage() {
     const baseUrl = process.env.baseUrl
@@ -99,7 +100,9 @@ export default async function FaqsPage() {
                                         <div className="mt-4 border-t border-gray-100 pt-4">
 
                                             <p className="whitespace-pre-line leading-7 text-gray-600">
-                                                {faq.answer}
+                                              
+                                                <RichTextContent answer={faq.answer}/>
+                                                
                                             </p>
 
                                         </div>
