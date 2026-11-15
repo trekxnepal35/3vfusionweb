@@ -1132,10 +1132,10 @@ FETCH FAQS
 
                               <div className="mt-4 border-t border-gray-100 pt-4">
 
-                                <p className="whitespace-pre-line leading-7 text-gray-600">
+                                {/* <p className="whitespace-pre-line leading-7 text-gray-600"> */}
                                  
                                  <RichTextContent content={faq.answer}/>
-                                </p>
+                               
 
                               </div>
 

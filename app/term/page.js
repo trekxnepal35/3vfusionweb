@@ -87,7 +87,7 @@ export default async function TermsPage() {
                                         {item.question}
                                     </h5>
 
-                                    <div className="whitespace-pre-line text-justify mt-5 text-base leading-8 text-slate-600">
+                                    <div className="text-justify mt-5 text-base leading-8 text-slate-600">
                                        
                                         <RichTextContent content={item.answer}/>
                                     </div>
