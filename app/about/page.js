@@ -64,7 +64,7 @@ RESOLVE ABOUT PAGE IMAGE
           </p>
 
 
-          <p className=" whitespace-pre-line mt-6 text-justify max-w-full text-sm leading-8 text-gray-200">
+          <p className=" whitespace-pre-line mt-6 text-justify max-w-full text-lg leading-8 text-gray-200">
             {page.description}
             {/* <RichTextContent content={page.description}  /> */}
          
@@ -340,48 +340,52 @@ RESOLVE ABOUT PAGE IMAGE
     {/* ========================================
       CTA
   ======================================== */}
+   <section className="px-6 pb-24 lg:px-8">
 
-    <section className="bg-gray-900">
+<div className="mx-auto max-w-full overflow-hidden rounded-[2rem] bg-emerald-600 px-8 py-16 text-center shadow-xl sm:px-16">
 
-      <div className="mx-auto max-w-full px-6 py-16 text-center sm:px-8 lg:px-12 lg:py-20">
-
-      <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-          Ready to Explore Nepal?
-        </h2>
-
-        <p className="mx-auto mt-5 max-w-full text-lg leading-8 text-gray-300">
-          Explore our trekking, tour, climbing, and adventure experiences  and start planning your journey.
-        </p>
+  <span className="text-sm font-bold uppercase tracking-[0.25em] text-emerald-100">
+    Start Your Adventure
+  </span>
 
 
-        <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
+  <h2 className="mx-auto mt-4  text-4xl font-black tracking-tight text-white sm:text-5xl">
 
-          <Link
-            href="/treks"
-            className="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-100"
-          >
-            Explore Treks
-          </Link>
+    Ready to explore Nepal?
 
-          <Link
-            href="/tours"
-            className="rounded-xl border border-white/30 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            Explore Tours
-          </Link>
+  </h2>
 
-          <Link
-            href="/contact"
-            className="rounded-xl border border-white/30 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            Contact Us
-          </Link>
 
-        </div>
+  <p className="mx-auto mt-6  text-lg leading-8 text-emerald-50">
 
-      </div>
+    Find your perfect trek or tour and begin planning
+    an unforgettable journey through the Himalayas.
 
-    </section>
+  </p>
+
+
+  <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
+
+    <Link
+      href="/treks"
+      className="rounded-full bg-white px-8 py-4 font-bold text-emerald-700 transition hover:-translate-y-1 hover:bg-slate-100"
+    >
+      Explore Treks
+    </Link>
+
+
+    <Link
+      href="/tours"
+      className="rounded-full border border-white/40 px-8 py-4 font-bold text-white transition hover:bg-white/10"
+    >
+      Explore Tours
+    </Link>
+
+  </div>
+
+</div>
+
+</section>
 
   </main>
   );
