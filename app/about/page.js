@@ -64,11 +64,11 @@ RESOLVE ABOUT PAGE IMAGE
           </p>
 
 
-          {/* <p className=" whitespace-pre-line mt-6 text-justify max-w-full text-lg leading-8 text-gray-200"> */}
-            {/* {page.description} */}
-            <RichTextContent content={page.description}  />
-          Hello
-
+          <p className=" whitespace-pre-line mt-6 text-justify max-w-full text-sm leading-8 text-gray-200">
+            {page.description}
+            {/* <RichTextContent content={page.description}  /> */}
+         
+          </p>
         </div>
 
       </div>
