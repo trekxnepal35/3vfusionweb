@@ -138,3 +138,11 @@ ul {
   color: #2563eb;
   text-decoration: underline;
 }
+
+.rich-text-content {
+  line-height: 1.1;
+}
+
+.rich-text-content p {
+  margin: 0 0 6px 0;
+}

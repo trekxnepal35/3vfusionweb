@@ -288,11 +288,7 @@ export default async function TourDetailPage({
   ];
 
 
-  /*
-  ========================================
-  GalleryImages  ImagesGallery
-  ========================================
-  */
+  
   /*
 ========================================
 GALLERY IMAGES
