@@ -520,6 +520,24 @@ export default function SearchPageClient() {
       return `/blog/${slug}`;
 
     }
+    /*
+    team
+    */
+
+    if (type === "team") {
+
+      return `/team/${slug}`;
+
+    }
+    /*
+    Guides
+    */
+
+    if (type === "guide") {
+
+      return `/guides/${slug}`;
+
+    }
 
 
     /*
