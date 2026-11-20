@@ -383,7 +383,7 @@ export default async function WellnessDetailPage({ params }) {
                           className="rounded-xl border bg-white p-6 shadow-sm"
                         >
                           <SectionCollapse
-                            title={`Day${day.day}:  ${day.title}`}
+                            title={`Day ${day.day}:  ${day.title}`}
                           >
                             {/* DAY DESCRIPTION */}
 
